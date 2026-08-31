@@ -10,6 +10,8 @@ Telegram bot for solving a Rubik's cube.
   cube. The board is redrawn after every move and the full move log is shown in
   the caption.
 - Once the cube is solved, the bot congratulates you.
+- `/stats` — shows your finished-game statistics (total, solved vs abandoned,
+  average and best move counts).
 - `/stop` — ends your current (active) game. Finished games are kept for
   reference; send `/start` to play again.
 - `/help` — shows available commands.
@@ -30,6 +32,10 @@ Environment variables (loaded from `.env` if present):
 - `LOG_LEVEL` — optional, zerolog level (default `info`).
 - `DB_PATH` — optional, path to the SQLite database (default `rubix.db`).
 - `HISTORY_LIMIT_PER_CHAT` — optional, ended sessions kept per chat (default `500`).
+- `SHUTDOWN_TIMEOUT` — optional, grace period for in-flight work on shutdown (default `5s`).
+- `SOCKS5_PROXY` — optional SOCKS5 proxy address (`host:port` or `socks5://host:port`).
+  Empty means a direct connection.
+- `SOCKS5_USER` / `SOCKS5_PASS` — optional credentials for an authenticated SOCKS5 proxy.
 
 ## Run
 
@@ -42,6 +48,6 @@ go run ./cmd/bot
 
 - Multiplayer voting mode: several users solve one cube together by voting for
   the next move.
-- Optional SOCKS5 proxy layer (go-tg-proxy) when Telegram is blocked.
 - Rich-message presentation once the experimental Bot API is broadly supported.
 - `/start [scrumble]` starts a new session with specified scrumble.
+- Per-move move-count column to offload stats aggregation to SQL.
