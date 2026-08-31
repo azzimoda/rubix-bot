@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/azzimoda/rubix-bot/internal/bot"
 	"github.com/azzimoda/rubix-bot/internal/config"
@@ -48,11 +49,30 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
+	// Run the bot's long-polling loop in the background; it blocks until the
+	// context it is given is cancelled, then returns and signals done.
+	botDone := make(chan struct{})
 	log.Info().Msg("Starting listening...")
-	go b.Start(ctx)
+	go func() {
+		b.Start(ctx)
+		close(botDone)
+	}()
 
 	<-ctx.Done()
+	log.Info().Msg("Shutting down...")
 
+	// Give in-flight requests a bounded grace period, then close the DB.
+	if cfg.ShutdownTimeout > 0 {
+		select {
+		case <-time.After(cfg.ShutdownTimeout):
+			log.Warn().Dur("timeout", cfg.ShutdownTimeout).Msg("Shutdown timed out")
+		case <-botDone:
+		}
+	}
+
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
 	log.Info().Msg("Done")
 }
 

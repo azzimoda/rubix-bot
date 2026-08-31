@@ -11,6 +11,19 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// validMove reports whether the given move name matches one of the buttons
+// shown on the board.
+func validMove(moveName string) bool {
+	for _, row := range moveButtons {
+		for _, btn := range row {
+			if btn.CallbackData == "move:"+moveName {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // boardTarget holds the identifiers needed to edit a board message.
 type boardTarget struct {
 	chatID    int64
@@ -76,6 +89,10 @@ func (h *handler) handleCQMove(ctx context.Context, b *bot.Bot, update *models.U
 	}
 
 	moveName := strings.TrimPrefix(cq.Data, "move:")
+	if !validMove(moveName) {
+		answerCallback(ctx, b, cq, "Unknown move.")
+		return
+	}
 	session, err := h.session.ApplyMove(ctx, chatID, moveName)
 	if err != nil {
 		log.Error().Err(err).Msg("move: failed to apply move")
@@ -117,7 +134,7 @@ func (h *handler) editBoard(ctx context.Context, b *bot.Bot, target boardTarget,
 		Media:           "attach://board.png",
 		MediaAttachment: bytes.NewReader(img),
 	}
-	if _, err := b.EditMessageMedia(ctx, &bot.EditMessageMediaParams{
+	if err := editMessageMediaRetry(ctx, b, &bot.EditMessageMediaParams{
 		ChatID:      target.chatID,
 		MessageID:   target.messageID,
 		Media:       media,
@@ -126,17 +143,16 @@ func (h *handler) editBoard(ctx context.Context, b *bot.Bot, target boardTarget,
 		return err
 	}
 
-	_, err = b.EditMessageCaption(ctx, &bot.EditMessageCaptionParams{
+	return editMessageCaptionRetry(ctx, b, &bot.EditMessageCaptionParams{
 		ChatID:      target.chatID,
 		MessageID:   target.messageID,
 		Caption:     boardCaption(session),
 		ReplyMarkup: boardKeyboard(session.Solved),
 	})
-	return err
 }
 
 func answerCallback(ctx context.Context, b *bot.Bot, cq *models.CallbackQuery, text string) {
-	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+	if err := answerCallbackRetry(ctx, b, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: cq.ID,
 		Text:            text,
 	}); err != nil {

@@ -33,7 +33,7 @@ type Session struct {
 	gorm.Model
 
 	// ChatID references the owning chat.
-	ChatID uint `gorm:"column:chat_id;index"`
+	ChatID uint `gorm:"column:chat_id;index:idx_sessions_chat_ended,priority:1"`
 	// State is the serialized cube.
 	State string `gorm:"column:state;not null"`
 	// Scramble is the initial scramble applied to the cube.
@@ -43,7 +43,7 @@ type Session struct {
 	// Solved is true once the cube has been solved.
 	Solved bool `gorm:"column:solved;not null;default:false"`
 	// Ended is true once the session is finished (solved or abandoned).
-	Ended bool `gorm:"column:ended;not null;default:false"`
+	Ended bool `gorm:"column:ended;not null;default:false;index:idx_sessions_chat_ended,priority:2"`
 }
 
 func (s *Session) SetCube(c *rubix.Cube)      { s.State = marshalCube(c) }
