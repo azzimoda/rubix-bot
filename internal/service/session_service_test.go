@@ -256,3 +256,65 @@ func TestStartTrimsEndedHistoryToLimit(t *testing.T) {
 		t.Fatalf("expected an active session, got %v", err)
 	}
 }
+
+func TestStatsOverEndedSessions(t *testing.T) {
+	ctx := context.Background()
+	svc, chatID, repo := newTestSessionService(t)
+
+	addEnded := func(solved bool, moves string) {
+		s := model.NewSession(chatID)
+		s.Ended = true
+		s.Solved = solved
+		s.Moves = moves
+		if err := repo.Create(ctx, s); err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+	}
+
+	// Solved sessions with 3, 8 and 6 moves; two abandoned.
+	addEnded(true, "R U F")
+	addEnded(true, "R2 U F B L D R U")
+	addEnded(true, "R2 U F L D R")
+	addEnded(false, "R U")
+	addEnded(false, "R U F D L R U F B")
+
+	stats, err := svc.Stats(ctx, chatID)
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.Total != 5 {
+		t.Fatalf("expected total 5, got %d", stats.Total)
+	}
+	if stats.Solved != 3 {
+		t.Fatalf("expected solved 3, got %d", stats.Solved)
+	}
+	if stats.Abandoned != 2 {
+		t.Fatalf("expected abandoned 2, got %d", stats.Abandoned)
+	}
+	// avg = (3+8+6)/3 = 17/3 ≈ 6
+	if stats.AvgMovesSolved != 6 {
+		t.Fatalf("expected avg moves 6, got %d", stats.AvgMovesSolved)
+	}
+	if stats.BestMovesSolved != 3 {
+		t.Fatalf("expected best moves 3, got %d", stats.BestMovesSolved)
+	}
+	if got := stats.SolveRate(); got != 0.6 {
+		t.Fatalf("expected solve rate 0.6, got %v", got)
+	}
+}
+
+func TestStatsEmptyHistory(t *testing.T) {
+	ctx := context.Background()
+	svc, chatID, _ := newTestSessionService(t)
+
+	stats, err := svc.Stats(ctx, chatID)
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.Total != 0 || stats.Solved != 0 || stats.Abandoned != 0 {
+		t.Fatalf("expected all-zero stats for empty history, got %+v", stats)
+	}
+	if stats.SolveRate() != 0 {
+		t.Fatalf("expected solve rate 0 for empty history, got %v", stats.SolveRate())
+	}
+}

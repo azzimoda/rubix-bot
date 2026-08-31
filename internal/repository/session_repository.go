@@ -12,6 +12,9 @@ type SessionRepository interface {
 	Create(ctx context.Context, session *model.Session) error
 	GetByID(ctx context.Context, id uint, out *model.Session) error
 	GetActiveByChat(ctx context.Context, chatID uint) (*model.Session, error)
+	// EndedByChat returns all ended (solved or abandoned) sessions for a chat,
+	// newest first.
+	EndedByChat(ctx context.Context, chatID uint) ([]model.Session, error)
 	Update(ctx context.Context, session *model.Session) error
 	// TrimHistory deletes a chat's ended sessions beyond the newest keep,
 	// leaving the active session untouched.
@@ -44,6 +47,15 @@ func (r *gormSessionRepository) GetActiveByChat(ctx context.Context, chatID uint
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (r *gormSessionRepository) EndedByChat(ctx context.Context, chatID uint) ([]model.Session, error) {
+	var sessions []model.Session
+	err := r.db.WithContext(ctx).
+		Where("chat_id = ? AND ended = ?", chatID, true).
+		Order("created_at desc").
+		Find(&sessions).Error
+	return sessions, err
 }
 
 func (r *gormSessionRepository) Update(ctx context.Context, session *model.Session) error {
