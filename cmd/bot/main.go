@@ -39,8 +39,11 @@ func main() {
 	sessionService := service.NewSessionService(repository.NewSessionRepository(db), cfg.HistoryLimitPerChat)
 
 	b, err := bot.New(cfg.BotToken, bot.Deps{
-		Chat:    chatService,
-		Session: sessionService,
+		Chat:       chatService,
+		Session:    sessionService,
+		Socks5Addr: cfg.SOCKS5Proxy,
+		Socks5User: cfg.SOCKS5User,
+		Socks5Pass: cfg.SOCKS5Pass,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create bot!")
