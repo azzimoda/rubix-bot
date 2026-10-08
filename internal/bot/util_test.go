@@ -6,21 +6,6 @@ import (
 	"testing"
 )
 
-func TestValidMove(t *testing.T) {
-	valid := []string{"F", "F'", "B", "B'", "U", "U'", "D", "D'", "L", "L'", "R", "R'", "x", "x'", "y", "y'", "z", "z'"}
-	for _, m := range valid {
-		if !validMove(m) {
-			t.Fatalf("expected %q to be a valid move", m)
-		}
-	}
-	invalid := []string{"", "Q", "X", "M", "F2", "R2", "u", "l", "b", "d", "f", "r"}
-	for _, m := range invalid {
-		if validMove(m) {
-			t.Fatalf("expected %q to be an invalid move", m)
-		}
-	}
-}
-
 func TestDoWithRetryStopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

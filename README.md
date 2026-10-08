@@ -5,12 +5,13 @@ Telegram bot for solving a Rubik's cube.
 ## How it works
 
 - `/start` — begins a new game: a fresh 3x3 cube is scrambled and sent as a
-  picture with an inline keyboard. An optional scramble can be given, either as
-  notation moves (`/start R U F' L`) or as a scramble length (`/start 40`);
-  `/start` alone produces a random scramble.
+  rich message with the rendered cube, a collapsible move log and move buttons.
+  An optional scramble can be given, either as notation moves
+  (`/start R U F' L`) or as a scramble length (`/start 40`); `/start` alone
+  produces a random scramble.
 - Tap the move buttons (F, F', B, B', U, U', D, D', L, L', R, R') to rotate the
-  cube. The board is redrawn after every move and the full move log is shown in
-  the caption.
+  cube. The board is redrawn in place after every move and the move log grows
+  without length limits.
 - Once the cube is solved, the bot congratulates you.
 - `/stats` — shows your finished-game statistics (total, solved vs abandoned,
   average and best move counts).
@@ -19,8 +20,10 @@ Telegram bot for solving a Rubik's cube.
 - `/help` — shows available commands.
 
 The picture shows the cube from two orthographic perspectives side by side with
-the unfolded net in the corner. Sessions, the scramble and every applied move
-are persisted so a game survives restarts.
+the unfolded net in the corner. The board is delivered as a Telegram rich
+message: the cube photo, a collapsible move log and the move buttons are all
+part of the same message and are updated with a single edit per move. Sessions,
+the scramble and every applied move are persisted so a game survives restarts.
 
 Ended games — both solved and abandoned — are kept as history for later
 analysis. History per chat is bounded to the newest
@@ -50,5 +53,4 @@ go run ./cmd/bot
 
 - Multiplayer voting mode: several users solve one cube together by voting for
   the next move.
-- Rich-message presentation once the experimental Bot API is broadly supported.
 - Per-move move-count column to offload stats aggregation to SQL.

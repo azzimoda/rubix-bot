@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"bytes"
 	"context"
 	"strings"
 
@@ -14,11 +13,9 @@ import (
 // validMove reports whether the given move name matches one of the buttons
 // shown on the board.
 func validMove(moveName string) bool {
-	for _, row := range moveButtons {
-		for _, btn := range row {
-			if btn.CallbackData == "move:"+moveName {
-				return true
-			}
+	for _, btn := range moveButtonsRich {
+		if btn.CallbackData == "move:"+moveName {
+			return true
 		}
 	}
 	return false
@@ -122,32 +119,18 @@ func (h *handler) resolveActiveChat(ctx context.Context, tgChatID int64) (uint, 
 	return chat.ID, true
 }
 
-// editBoard re-renders the board image, caption and keyboard into the given
-// message, replacing the previous state.
+// editBoard rebuilds the rich message presenting the board in the given
+// message, replacing the previous state with a single edit.
 func (h *handler) editBoard(ctx context.Context, b *bot.Bot, target boardTarget, session *model.Session) error {
-	img, err := BoardImage(session)
+	rich, err := boardRichMessage(session)
 	if err != nil {
 		return err
 	}
 
-	media := &models.InputMediaPhoto{
-		Media:           "attach://board.png",
-		MediaAttachment: bytes.NewReader(img),
-	}
-	if err := editMessageMediaRetry(ctx, b, &bot.EditMessageMediaParams{
+	return editMessageTextRetry(ctx, b, &bot.EditMessageTextParams{
 		ChatID:      target.chatID,
 		MessageID:   target.messageID,
-		Media:       media,
-		ReplyMarkup: boardKeyboard(session.Solved),
-	}); err != nil {
-		return err
-	}
-
-	return editMessageCaptionRetry(ctx, b, &bot.EditMessageCaptionParams{
-		ChatID:      target.chatID,
-		MessageID:   target.messageID,
-		Caption:     boardCaption(session),
-		ReplyMarkup: boardKeyboard(session.Solved),
+		RichMessage: rich,
 	})
 }
 

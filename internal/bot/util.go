@@ -42,6 +42,14 @@ func SendMessageRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessagePa
 	return
 }
 
+func sendRichMessageRetry(ctx context.Context, b *bot.Bot, params *bot.SendRichMessageParams) (msg *models.Message, err error) {
+	err = doWithRetry(ctx, func() (err error) {
+		msg, err = b.SendRichMessage(ctx, params)
+		return
+	})
+	return
+}
+
 func answerCallbackRetry(ctx context.Context, b *bot.Bot, params *bot.AnswerCallbackQueryParams) error {
 	return doWithRetry(ctx, func() error {
 		_, err := b.AnswerCallbackQuery(ctx, params)
@@ -49,16 +57,9 @@ func answerCallbackRetry(ctx context.Context, b *bot.Bot, params *bot.AnswerCall
 	})
 }
 
-func editMessageMediaRetry(ctx context.Context, b *bot.Bot, params *bot.EditMessageMediaParams) error {
+func editMessageTextRetry(ctx context.Context, b *bot.Bot, params *bot.EditMessageTextParams) error {
 	return doWithRetry(ctx, func() error {
-		_, err := b.EditMessageMedia(ctx, params)
-		return err
-	})
-}
-
-func editMessageCaptionRetry(ctx context.Context, b *bot.Bot, params *bot.EditMessageCaptionParams) error {
-	return doWithRetry(ctx, func() error {
-		_, err := b.EditMessageCaption(ctx, params)
+		_, err := b.EditMessageText(ctx, params)
 		return err
 	})
 }

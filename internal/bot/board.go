@@ -13,54 +13,37 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const captionMax = 1024
-
-// moveButtons is the inline keyboard layout of the moves a user can apply.
-var moveButtons = [][]models.InlineKeyboardButton{
-	{
-		{Text: "F", CallbackData: "move:F"},
-		{Text: "F'", CallbackData: "move:F'"},
-		{Text: "B", CallbackData: "move:B"},
-		{Text: "B'", CallbackData: "move:B'"},
-	},
-	{
-		{Text: "U", CallbackData: "move:U"},
-		{Text: "U'", CallbackData: "move:U'"},
-		{Text: "D", CallbackData: "move:D"},
-		{Text: "D'", CallbackData: "move:D'"},
-	},
-	{
-		{Text: "L", CallbackData: "move:L"},
-		{Text: "L'", CallbackData: "move:L'"},
-		{Text: "R", CallbackData: "move:R"},
-		{Text: "R'", CallbackData: "move:R'"},
-	},
-	{
-		{Text: "x", CallbackData: "move:x"},
-		{Text: "x'", CallbackData: "move:x'"},
-		{Text: "y", CallbackData: "move:y"},
-		{Text: "y'", CallbackData: "move:y'"},
-		{Text: "z", CallbackData: "move:z"},
-		{Text: "z'", CallbackData: "move:z'"},
-	},
+// moveButtonsRich is the rich-message button layout of the moves a user can
+// apply. Rich message buttons wrap naturally, so the layout is a flat list.
+var moveButtonsRich = []models.RichMessageButton{
+	richButton("F", "move:F"),
+	richButton("F'", "move:F'"),
+	richButton("B", "move:B"),
+	richButton("B'", "move:B'"),
+	richButton("U", "move:U"),
+	richButton("U'", "move:U'"),
+	richButton("D", "move:D"),
+	richButton("D'", "move:D'"),
+	richButton("L", "move:L"),
+	richButton("L'", "move:L'"),
+	richButton("R", "move:R"),
+	richButton("R'", "move:R'"),
+	richButton("x", "move:x"),
+	richButton("x'", "move:x'"),
+	richButton("y", "move:y"),
+	richButton("y'", "move:y'"),
+	richButton("z", "move:z"),
+	richButton("z'", "move:z'"),
 }
 
-// boardKeyboard builds the inline keyboard shown on the board. When the cube
-// is solved only the restart button remains.
-func boardKeyboard(solved bool) *models.InlineKeyboardMarkup {
-	if solved {
-		return &models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{{Text: "🔄 Restart", CallbackData: "session:restart"}},
-			},
-		}
-	}
-	rows := make([][]models.InlineKeyboardButton, len(moveButtons)+1)
-	copy(rows, moveButtons)
-	rows[len(moveButtons)] = []models.InlineKeyboardButton{
-		{Text: "🔄 Restart", CallbackData: "session:restart"},
-	}
-	return &models.InlineKeyboardMarkup{InlineKeyboard: rows}
+// richButton builds a plain-text rich message button with callback data.
+func richButton(text, callbackData string) models.RichMessageButton {
+	return models.RichMessageButton{Text: models.RichText{PlainText: text}, CallbackData: callbackData}
+}
+
+// restartButton is the button shown to start a fresh game.
+func restartButton() models.RichMessageButton {
+	return richButton("🔄 Restart", "session:restart")
 }
 
 // BoardImage renders the cube to a PNG suitable for sending to Telegram.
@@ -72,9 +55,91 @@ func BoardImage(session *model.Session) ([]byte, error) {
 	return render.Board(cube)
 }
 
-// sendBoard sends a brand-new board photo with caption and keyboard.
-func (h *handler) sendBoard(ctx context.Context, b *bot.Bot, chatID int64, threadID int, session *model.Session) {
+// boardRichMessage builds the rich message presenting the board: a status
+// heading, the rendered cube photo with the scramble as its caption, a
+// collapsible move log and the move/restart buttons.
+func boardRichMessage(session *model.Session) (*models.InputRichMessage, error) {
 	img, err := BoardImage(session)
+	if err != nil {
+		return nil, err
+	}
+
+	status := "🧩 Solve the cube"
+	if session.Solved {
+		status = "🎉 Solved! 🎉"
+	}
+
+	blocks := []models.InputRichBlock{
+		{
+			Type: models.RichBlockTypeSectionHeading,
+			InputRichBlockSectionHeading: &models.InputRichBlockSectionHeading{
+				Text: models.RichText{PlainText: status},
+				Size: 2,
+			},
+		},
+		{
+			Type: models.RichBlockTypePhoto,
+			InputRichBlockPhoto: &models.InputRichBlockPhoto{
+				Photo: models.InputMediaPhoto{
+					Media:           "attach://board.png",
+					MediaAttachment: bytes.NewReader(img),
+				},
+				Caption: &models.RichBlockCaption{Text: models.RichText{PlainText: photoCaption(session)}},
+			},
+		},
+		{
+			Type: models.RichBlockTypeDetails,
+			InputRichBlockDetails: &models.InputRichBlockDetails{
+				Summary: models.RichText{PlainText: fmt.Sprintf("🎯 Moves (%d)", len(session.MovesList()))},
+				IsOpen:  !session.Solved,
+				Blocks:  []models.InputRichBlock{moveLogBlock(session)},
+			},
+		},
+		{
+			Type: models.RichBlockTypeButtons,
+			InputRichBlockButtons: &models.InputRichBlockButtons{
+				Buttons: boardButtons(session.Solved),
+			},
+		},
+	}
+
+	return &models.InputRichMessage{Blocks: blocks}, nil
+}
+
+// boardButtons is the button set for the board. While a game is active it shows
+// the move buttons plus restart; once solved only restart remains.
+func boardButtons(solved bool) []models.RichMessageButton {
+	if solved {
+		return []models.RichMessageButton{restartButton()}
+	}
+	buttons := make([]models.RichMessageButton, 0, len(moveButtonsRich)+1)
+	buttons = append(buttons, moveButtonsRich...)
+	return append(buttons, restartButton())
+}
+
+// photoCaption is the caption shown beneath the rendered cube.
+func photoCaption(session *model.Session) string {
+	return "📋 Scramble: " + session.Scramble
+}
+
+// moveLogBlock renders the player's moves so far, or a hint when none exist.
+func moveLogBlock(session *model.Session) models.InputRichBlock {
+	text := "No moves applied yet."
+	if moves := session.MovesList(); len(moves) > 0 {
+		text = strings.Join(moves, " ")
+	}
+	return models.InputRichBlock{
+		Type: models.RichBlockTypePreformatted,
+		InputRichBlockPreformatted: &models.InputRichBlockPreformatted{
+			Text:     models.RichText{PlainText: text},
+			Language: "text",
+		},
+	}
+}
+
+// sendBoard sends a brand-new board as a rich message.
+func (h *handler) sendBoard(ctx context.Context, b *bot.Bot, chatID int64, threadID int, session *model.Session) {
+	rich, err := boardRichMessage(session)
 	if err != nil {
 		log.Error().Err(err).Msg("sendBoard: failed to render board")
 		SendMessageRetry(ctx, b, &bot.SendMessageParams{
@@ -84,39 +149,11 @@ func (h *handler) sendBoard(ctx context.Context, b *bot.Bot, chatID int64, threa
 		return
 	}
 
-	photo := &models.InputFileUpload{Filename: "board.png", Data: bytes.NewReader(img)}
-	if _, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
+	if _, err := sendRichMessageRetry(ctx, b, &bot.SendRichMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
-		Photo:           photo,
-		Caption:         boardCaption(session),
-		ReplyMarkup:     boardKeyboard(session.Solved),
+		RichMessage:     *rich,
 	}); err != nil {
-		log.Error().Err(err).Msg("sendBoard: failed to send photo")
+		log.Error().Err(err).Msg("sendBoard: failed to send board")
 	}
-}
-
-func boardCaption(session *model.Session) string {
-	var b strings.Builder
-
-	if session.Solved {
-		b.WriteString("🎉 Solved! 🎉\n\n")
-	} else {
-		b.WriteString("🧩 Solve the cube by tapping the move buttons.\n\n")
-	}
-
-	fmt.Fprintf(&b, "📋 Scramble: %s\n\n", session.Scramble)
-
-	moves := session.MovesList()
-	if len(moves) == 0 {
-		b.WriteString("🎯 Moves (0): —")
-	} else {
-		fmt.Fprintf(&b, "🎯 Moves (%d): %s", len(moves), strings.Join(moves, " "))
-	}
-
-	s := b.String()
-	if len(s) > captionMax {
-		s = s[:captionMax]
-	}
-	return s
 }

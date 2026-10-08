@@ -5,51 +5,85 @@ import (
 	"testing"
 
 	"github.com/azzimoda/rubix-bot/internal/model"
+	"github.com/go-telegram/bot/models"
 )
 
-func TestBoardCaption(t *testing.T) {
-	sess := &model.Session{
-		Scramble: "R U F2",
-	}
-	got := boardCaption(sess)
-	for _, want := range []string{"Scramble: R U F2", "Moves (0)"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("caption missing %q:\n%s", want, got)
+// findBlocks returns all blocks of the given type in the rich message.
+func findBlocks(rich *models.InputRichMessage, t models.RichBlockType) []models.InputRichBlock {
+	var out []models.InputRichBlock
+	for _, b := range rich.Blocks {
+		if b.Type == t {
+			out = append(out, b)
 		}
 	}
-
-	sess.AppendMove("R")
-	sess.AppendMove("U'")
-	if got := boardCaption(sess); !strings.Contains(got, "Moves (2): R U'") {
-		t.Fatalf("expected updated moves in caption:\n%s", got)
-	}
-
-	sess.Solved = true
-	if got := boardCaption(sess); !strings.Contains(got, "Solved") {
-		t.Fatalf("expected solved text in caption:\n%s", got)
-	}
+	return out
 }
 
-func TestBoardKeyboardHasMoves(t *testing.T) {
-	kb := boardKeyboard(false)
-	count := 0
-	for _, row := range kb.InlineKeyboard {
-		for _, btn := range row {
-			if strings.HasPrefix(btn.CallbackData, "move:") {
-				count++
-			}
+func blockTexts(blocks []models.InputRichBlock) []string {
+	var out []string
+	for _, b := range blocks {
+		switch b.Type {
+		case models.RichBlockTypeSectionHeading:
+			out = append(out, b.InputRichBlockSectionHeading.Text.PlainText)
+		case models.RichBlockTypePreformatted:
+			out = append(out, b.InputRichBlockPreformatted.Text.PlainText)
 		}
 	}
-	if count != 18 {
-		t.Fatalf("expected 18 move buttons, got %d", count)
+	return out
+}
+
+func TestBoardRichMessageActive(t *testing.T) {
+	sess := &model.Session{Scramble: "R U F2"}
+	sess.AppendMove("R")
+	sess.AppendMove("U'")
+	sess.State = testSolvedState()
+	rich, err := boardRichMessage(sess)
+	if err != nil {
+		t.Fatalf("boardRichMessage: %v", err)
+	}
+
+	// Move log in a details block: summary counts them, content lists them.
+	details := findBlocks(rich, models.RichBlockTypeDetails)
+	if len(details) != 1 {
+		t.Fatalf("expected 1 details block, got %d", len(details))
+	}
+	if !details[0].InputRichBlockDetails.IsOpen {
+		t.Fatalf("active game details should be open")
+	}
+	if !strings.Contains(details[0].InputRichBlockDetails.Summary.PlainText, "Moves (2)") {
+		t.Fatalf("unexpected summary: %q", details[0].InputRichBlockDetails.Summary.PlainText)
+	}
+	logs := blockTexts(details[0].InputRichBlockDetails.Blocks)
+	if len(logs) != 1 || logs[0] != "R U'" {
+		t.Fatalf("unexpected move log: %v", logs)
+	}
+
+	// Buttons: 18 moves + restart while active.
+	buttons := findBlocks(rich, models.RichBlockTypeButtons)
+	if len(buttons) != 1 {
+		t.Fatalf("expected 1 buttons block, got %d", len(buttons))
+	}
+	btnList := buttons[0].InputRichBlockButtons.Buttons
+	moveCount, restartCount := 0, 0
+	for _, btn := range btnList {
+		if strings.HasPrefix(btn.CallbackData, "move:") {
+			moveCount++
+		}
+		if btn.CallbackData == "session:restart" {
+			restartCount++
+		}
+	}
+	if moveCount != 18 {
+		t.Fatalf("expected 18 move buttons, got %d", moveCount)
+	}
+	if restartCount != 1 {
+		t.Fatalf("expected exactly 1 restart button, got %d", restartCount)
 	}
 	for _, want := range []string{"move:x", "move:x'", "move:y", "move:y'", "move:z", "move:z'"} {
 		found := false
-		for _, row := range kb.InlineKeyboard {
-			for _, btn := range row {
-				if btn.CallbackData == want {
-					found = true
-				}
+		for _, btn := range btnList {
+			if btn.CallbackData == want {
+				found = true
 			}
 		}
 		if !found {
@@ -58,18 +92,41 @@ func TestBoardKeyboardHasMoves(t *testing.T) {
 	}
 }
 
-func TestBoardKeyboardSolvedOnlyRestart(t *testing.T) {
-	kb := boardKeyboard(true)
-	moveCount := 0
-	restartCount := 0
-	for _, row := range kb.InlineKeyboard {
-		for _, btn := range row {
-			if strings.HasPrefix(btn.CallbackData, "move:") {
-				moveCount++
-			}
-			if btn.CallbackData == "session:restart" {
-				restartCount++
-			}
+func TestBoardRichMessageSolved(t *testing.T) {
+	sess := &model.Session{Scramble: "R U F2", Solved: true, Moves: "R U'"}
+	sess.State = testSolvedState()
+	rich, err := boardRichMessage(sess)
+	if err != nil {
+		t.Fatalf("boardRichMessage: %v", err)
+	}
+
+	headings := findBlocks(rich, models.RichBlockTypeSectionHeading)
+	if len(headings) != 1 || !strings.Contains(headings[0].InputRichBlockSectionHeading.Text.PlainText, "Solved") {
+		t.Fatalf("expected solved heading, got %+v", headings)
+	}
+
+	// Move log must be collapsed once solved.
+	details := findBlocks(rich, models.RichBlockTypeDetails)
+	if len(details) != 1 {
+		t.Fatalf("expected 1 details block, got %d", len(details))
+	}
+	if details[0].InputRichBlockDetails.IsOpen {
+		t.Fatalf("solved game details should be collapsed")
+	}
+
+	// Only restart remains once solved.
+	buttons := findBlocks(rich, models.RichBlockTypeButtons)
+	if len(buttons) != 1 {
+		t.Fatalf("expected 1 buttons block, got %d", len(buttons))
+	}
+	btnList := buttons[0].InputRichBlockButtons.Buttons
+	moveCount, restartCount := 0, 0
+	for _, btn := range btnList {
+		if strings.HasPrefix(btn.CallbackData, "move:") {
+			moveCount++
+		}
+		if btn.CallbackData == "session:restart" {
+			restartCount++
 		}
 	}
 	if moveCount != 0 {
@@ -78,4 +135,24 @@ func TestBoardKeyboardSolvedOnlyRestart(t *testing.T) {
 	if restartCount != 1 {
 		t.Fatalf("expected exactly 1 restart button when solved, got %d", restartCount)
 	}
+}
+
+func TestValidMoveMatchesRichButtons(t *testing.T) {
+	valid := []string{"F", "F'", "B", "B'", "U", "U'", "D", "D'", "L", "L'", "R", "R'", "x", "x'", "y", "y'", "z", "z'"}
+	for _, m := range valid {
+		if !validMove(m) {
+			t.Fatalf("expected %q to be a valid move", m)
+		}
+	}
+	invalid := []string{"", "Q", "X", "M", "F2", "R2", "u", "l", "b", "d", "f", "r"}
+	for _, m := range invalid {
+		if validMove(m) {
+			t.Fatalf("expected %q to be an invalid move", m)
+		}
+	}
+}
+
+// testSolvedState returns the serialized state of a freshly solved 3x3 cube.
+func testSolvedState() string {
+	return "000 000 000\n111 111 111\n222 222 222\n333 333 333\n444 444 444\n555 555 555"
 }

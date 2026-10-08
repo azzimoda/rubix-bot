@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/avast/retry-go/v5 v5.0.0
 	github.com/azzimoda/rubix v0.1.0
-	github.com/go-telegram/bot v1.24.0
+	github.com/go-telegram/bot v1.25.0
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.35.1
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
