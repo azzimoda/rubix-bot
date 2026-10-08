@@ -5,7 +5,9 @@ Telegram bot for solving a Rubik's cube.
 ## How it works
 
 - `/start` — begins a new game: a fresh 3x3 cube is scrambled and sent as a
-  picture with an inline keyboard.
+  picture with an inline keyboard. An optional scramble can be given, either as
+  notation moves (`/start R U F' L`) or as a scramble length (`/start 40`);
+  `/start` alone produces a random scramble.
 - Tap the move buttons (F, F', B, B', U, U', D, D', L, L', R, R') to rotate the
   cube. The board is redrawn after every move and the full move log is shown in
   the caption.
@@ -49,5 +51,4 @@ go run ./cmd/bot
 - Multiplayer voting mode: several users solve one cube together by voting for
   the next move.
 - Rich-message presentation once the experimental Bot API is broadly supported.
-- `/start [scrumble]` starts a new session with specified scrumble.
 - Per-move move-count column to offload stats aggregation to SQL.

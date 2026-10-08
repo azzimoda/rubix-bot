@@ -50,6 +50,42 @@ func TestNewSessionScramblesCube(t *testing.T) {
 	}
 }
 
+func TestNewSessionForAppliesScramble(t *testing.T) {
+	moves, err := rubix.Parse("R U F'")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	s := NewSessionFor(42, moves)
+	if s.ChatID != 42 {
+		t.Fatalf("chat id mismatch: %d", s.ChatID)
+	}
+	if want := "R U F'"; s.Scramble != want {
+		t.Fatalf("scramble mismatch: %q != %q", s.Scramble, want)
+	}
+	if s.Moves != "" || s.Solved || s.Ended {
+		t.Fatalf("new session should be fresh, got moves=%q solved=%v ended=%v", s.Moves, s.Solved, s.Ended)
+	}
+	c, err := s.Cube()
+	if err != nil {
+		t.Fatalf("Cube: %v", err)
+	}
+	// "R U F'" scrambles a solved cube away from solved.
+	if c.IsSolved() {
+		t.Fatalf("cube should be scrambled after R U F'")
+	}
+}
+
+func TestNewSessionForRecordsFullNotationScramble(t *testing.T) {
+	moves, err := rubix.Parse("(R U) R' (F2)")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	s := NewSessionFor(1, moves)
+	if want := "R U R' F2"; s.Scramble != want {
+		t.Fatalf("scramble mismatch: %q != %q", s.Scramble, want)
+	}
+}
+
 func TestAppendMove(t *testing.T) {
 	s := NewSession(1)
 	if got := s.MovesList(); got != nil {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/azzimoda/rubix-bot/internal/model"
 	"github.com/azzimoda/rubix-bot/internal/service"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -41,7 +43,23 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	session, err := h.session.Start(ctx, chat.ID)
+	arg := commandArgument(update.Message.Text, "start")
+	scramble, err := parseScrambleArg(arg)
+	if err != nil {
+		log.Debug().Str("arg", arg).Err(err).Msg("start: invalid scramble argument")
+		SendMessageRetry(ctx, b, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID, MessageThreadID: update.Message.MessageThreadID,
+			Text: "Invalid scramble.\nUsage: /start [scramble] — e.g. /start R U F' L, /start 40, or /start for a random scramble.",
+		})
+		return
+	}
+
+	var session *model.Session
+	if scramble == nil {
+		session, err = h.session.Start(ctx, chat.ID)
+	} else {
+		session, err = h.session.StartWithScramble(ctx, chat.ID, scramble)
+	}
 	if err != nil {
 		log.Error().Err(err).Msg("start: failed to start session")
 		SendMessageRetry(ctx, b, &bot.SendMessageParams{
@@ -55,9 +73,20 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 	log.Info().Msg("Handled command start")
 }
 
+// commandArgument returns the argument following a bot command in the message
+// text (e.g. "R U F'" for "/start R U F'"), or "" when there is none.
+func commandArgument(text, command string) string {
+	text = strings.TrimSpace(text)
+	prefix := "/" + command
+	if !strings.HasPrefix(text, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(text, prefix))
+}
+
 func (*handler) handleCmdHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	const helpMsg = "Solve the Rubik's cube by tapping the move buttons.\n" +
-		"/start — begin a new game\n" +
+		"/start [scramble] — begin a new game (e.g. /start R U F', or /start 40)\n" +
 		"/stats — show your finished-game statistics\n" +
 		"/stop  — end your current game"
 

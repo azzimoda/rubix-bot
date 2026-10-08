@@ -15,8 +15,13 @@ const ScrambleLength = 20
 // NewSession creates a new session with a freshly scrambled cube for the given
 // chat. The scramble uses a time-based seed so consecutive sessions differ.
 func NewSession(chatID uint) *Session {
+	return NewSessionFor(chatID, rubix.Scramble(ScrambleLength, rubix.NewRandom(time.Now().UnixNano())))
+}
+
+// NewSessionFor creates a new session whose cube is scrambled by the given
+// moves. The scramble is recorded verbatim so the player can review it.
+func NewSessionFor(chatID uint, scramble []rubix.Move) *Session {
 	c := rubix.New(3)
-	scramble := rubix.Scramble(ScrambleLength, rubix.NewRandom(time.Now().UnixNano()))
 	c.ApplyMoves(scramble)
 
 	return &Session{

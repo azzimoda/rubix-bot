@@ -257,6 +257,82 @@ func TestStartTrimsEndedHistoryToLimit(t *testing.T) {
 	}
 }
 
+func TestStartWithScramblePersistsCustomScramble(t *testing.T) {
+	ctx := context.Background()
+	svc, chatID, _ := newTestSessionService(t)
+
+	moves, err := rubix.Parse("R U F' L B2")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	sess, err := svc.StartWithScramble(ctx, chatID, moves)
+	if err != nil {
+		t.Fatalf("StartWithScramble: %v", err)
+	}
+	if want := "R U F' L B2"; sess.Scramble != want {
+		t.Fatalf("scramble mismatch: %q != %q", sess.Scramble, want)
+	}
+	if sess.Solved || sess.Ended {
+		t.Fatalf("fresh session should be active and unsolved, got solved=%v ended=%v", sess.Solved, sess.Ended)
+	}
+
+	active, err := svc.GetActive(ctx, chatID)
+	if err != nil {
+		t.Fatalf("GetActive: %v", err)
+	}
+	if active.ID != sess.ID {
+		t.Fatalf("expected active session to match started one")
+	}
+}
+
+func TestStartWithScrambleEndsPreviousActive(t *testing.T) {
+	ctx := context.Background()
+	svc, chatID, repo := newTestSessionService(t)
+
+	first, err := svc.Start(ctx, chatID)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	moves, err := rubix.Parse("R U F' L B2")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if _, err := svc.StartWithScramble(ctx, chatID, moves); err != nil {
+		t.Fatalf("StartWithScramble: %v", err)
+	}
+
+	var prev model.Session
+	if err := repoGetByID(t, repo, first.ID, &prev); err != nil {
+		t.Fatalf("expected previous session retained, got %v", err)
+	}
+	if !prev.Ended {
+		t.Fatalf("expected previous active session to be marked ended")
+	}
+	if prev.Solved {
+		t.Fatalf("previous session should not be marked solved")
+	}
+}
+
+func TestStartDefaultStillRandomScrambled(t *testing.T) {
+	ctx := context.Background()
+	svc, chatID, _ := newTestSessionService(t)
+
+	sess, err := svc.Start(ctx, chatID)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if sess.Scramble == "" {
+		t.Fatalf("expected a default random scramble")
+	}
+	cube, err := sess.Cube()
+	if err != nil {
+		t.Fatalf("Cube: %v", err)
+	}
+	if cube.IsSolved() {
+		t.Fatalf("default session must be scrambled")
+	}
+}
+
 func TestStatsOverEndedSessions(t *testing.T) {
 	ctx := context.Background()
 	svc, chatID, repo := newTestSessionService(t)

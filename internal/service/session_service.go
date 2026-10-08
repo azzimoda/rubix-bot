@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/azzimoda/rubix"
 	"github.com/azzimoda/rubix-bot/internal/model"
 	"github.com/azzimoda/rubix-bot/internal/repository"
 	"gorm.io/gorm"
@@ -27,6 +28,16 @@ func NewSessionService(repo repository.SessionRepository, historyLimit int) *Ses
 // Start creates a new active session for the chat. Any previous active session
 // is kept and marked ended; history is then trimmed to the configured limit.
 func (s *SessionService) Start(ctx context.Context, chatID uint) (*model.Session, error) {
+	return s.startFor(ctx, chatID, nil)
+}
+
+// StartWithScramble creates a new active session scrambled by the given moves.
+// It behaves like Start otherwise (previous active is ended, history trimmed).
+func (s *SessionService) StartWithScramble(ctx context.Context, chatID uint, scramble []rubix.Move) (*model.Session, error) {
+	return s.startFor(ctx, chatID, scramble)
+}
+
+func (s *SessionService) startFor(ctx context.Context, chatID uint, scramble []rubix.Move) (*model.Session, error) {
 	if prev, err := s.repo.GetActiveByChat(ctx, chatID); err == nil {
 		prev.Ended = true
 		if err := s.repo.Update(ctx, prev); err != nil {
@@ -37,6 +48,9 @@ func (s *SessionService) Start(ctx context.Context, chatID uint) (*model.Session
 	}
 
 	session := model.NewSession(chatID)
+	if scramble != nil {
+		session = model.NewSessionFor(chatID, scramble)
+	}
 	if err := s.repo.Create(ctx, session); err != nil {
 		return nil, err
 	}
